@@ -7,8 +7,11 @@ export const POST = async (req: NextRequest) => {
     
     const genericSchema = z.object({
         data: z.string(),
-        format: z.object({})
+        format: z.object({}).passthrough(),
     })
 
+    const res = genericSchema.parse(body)
+    console.log('res', res)
+
     return new Response("OK")
-} 
+}
