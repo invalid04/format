@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { ZodTypeAny, z } from "zod"
 
 const determineSchemaType = (schema: any) => {
@@ -9,6 +9,8 @@ const determineSchemaType = (schema: any) => {
             return typeof schema 
         }
     }
+
+    return schema.type
 }
 
 const jsonSchemaToZod = (schema: any): ZodTypeAny => {
@@ -54,5 +56,38 @@ export const POST = async (req: NextRequest) => {
     // create schema for user format
     const dynamicSchema = jsonSchemaToZod(format)
 
-    return new Response("OK")
+    // retry mechanism
+    type PromiseExecutor<T> = (
+        resolve: (value: T) => void, 
+        reject: (reason?: any) => void
+    ) => void
+
+    class RetryablePromise<T> extends Promise<T> {
+        static async retry<T>(
+            retries: number,
+            executor: PromiseExecutor<T>
+        ): Promise<T> {
+            return new RetryablePromise(executor).catch((error) => {
+                console.error(`Retrying due to error: ${error}`)
+
+                return retries > 0 
+                ? RetryablePromise.retry(retries - 1, executor) 
+                : RetryablePromise.reject(error)
+            })
+        }
+    }
+
+    const validationResult = RetryablePromise.retry<object>(3, (resolve, reject) => {
+        try {
+            const res = "{name: 'John'}"
+
+            const validationResult = dynamicSchema.parse(JSON.parse(res))
+
+            return resolve(validationResult)
+        } catch (err) {
+            reject(err)
+        }
+    })
+
+    return NextResponse.json(validationResult, { status: 200 })
 }
